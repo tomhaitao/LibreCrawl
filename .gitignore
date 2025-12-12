@@ -1,3 +1,14 @@
 
 *.pyc
 .claude/settings.local.json
+.venv/
+/logs
+/md
+/md.bak
+/custom_file
+/__pycache__
+*.env
+/users.db
+.DS_Store
+.vscode/
+.idea/

@@ -11,6 +11,8 @@ import string
 import os
 from io import StringIO
 from datetime import datetime, timedelta
+
+import requests
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_compress import Compress
 from functools import wraps
@@ -619,11 +621,17 @@ def debug_memory_page():
 def start_crawl():
     from src.auth_db import get_crawls_last_24h, log_crawl_start
 
-    data = request.get_json()
+    data = request.get_json() or {}
     url = data.get('url')
 
     if not url:
         return jsonify({'success': False, 'error': 'URL is required'})
+
+    # Ensure we have a crawler + session_id for this request before reading it
+    # This guarantees that API callers (like scripts) get a crawl_id persisted
+    # even if /api/start_crawl is their first request.
+    crawler = get_or_create_crawler()
+    settings_manager = get_session_settings()
 
     user_id = session.get('user_id')
     session_id = session.get('session_id')
@@ -642,10 +650,6 @@ def start_crawl():
 
         # Log this guest crawl
         log_guest_crawl(client_ip)
-
-    # Get or create crawler for this session
-    crawler = get_or_create_crawler()
-    settings_manager = get_session_settings()
 
     # Apply current settings to crawler before starting
     try:
@@ -1336,6 +1340,57 @@ def export_data():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+
+@app.route('/api/jina_crawl', methods=['POST'])
+@login_required
+def jina_crawl():
+    """
+    Call Jina's Read API to fetch a single page as markdown.
+
+    Expects JSON body: {"url": "https://example.com/page"}
+    Returns: {"success": true, "markdown": "..."} on success.
+    """
+    try:
+        data = request.get_json() or {}
+        url = data.get('url')
+
+        if not url:
+            return jsonify({'success': False, 'error': 'URL is required'}), 400
+
+        # Basic sanity check – the crawler already validates URLs, but keep this defensive
+        if not (url.startswith('http://') or url.startswith('https://')):
+            return jsonify({'success': False, 'error': 'Invalid URL format'}), 400
+
+        jina_base_url = os.getenv('JINA_BASE_URL', 'https://r.jina.ai').rstrip('/')
+        jina_api_key = os.getenv('JINA_API_KEY')
+
+        headers = {}
+        if jina_api_key:
+            headers['Authorization'] = f'Bearer {jina_api_key}'
+
+        # Jina Read API style: https://r.jina.ai/https://example.com/...
+        target = f"{jina_base_url}/{url}"
+
+        try:
+            resp = requests.get(target, headers=headers, timeout=60)
+        except Exception as e:
+            print(f"Error calling Jina API: {e}")
+            return jsonify({'success': False, 'error': 'Failed to call Jina API'}), 502
+
+        if resp.status_code != 200:
+            print(f"Jina API returned {resp.status_code}: {resp.text[:200]}")
+            return jsonify({
+                'success': False,
+                'error': f'Jina API error: HTTP {resp.status_code}'
+            }), 502
+
+        markdown = resp.text or ''
+
+        return jsonify({'success': True, 'markdown': markdown})
+    except Exception as e:
+        print(f"Unexpected error in /api/jina_crawl: {e}")
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
 def recover_crashed_crawls():
     """Check for and recover any crashed crawls on startup"""
     try:
@@ -1401,9 +1456,9 @@ def main():
     print("=" * 60)
     print("LibreCrawl - SEO Spider")
     print("=" * 60)
-    print(f"\n🚀 Server starting on http://0.0.0.0:5000")
-    print(f"🌐 Access from browser: http://localhost:5000")
-    print(f"📱 Access from network: http://<your-ip>:5000")
+    print(f"\n🚀 Server starting on http://0.0.0.0:6789")
+    print(f"🌐 Access from browser: http://localhost:6789")
+    print(f"📱 Access from network: http://<your-ip>:6789")
     print(f"\n✨ Multi-tenancy enabled - each browser session is isolated")
     print(f"💾 Settings stored in browser localStorage")
     print(f"\nPress Ctrl+C to stop the server\n")
@@ -1412,16 +1467,16 @@ def main():
     # Open browser in a separate thread after short delay
     def open_browser():
         time.sleep(1.5)  # Wait for Flask to start
-        webbrowser.open('http://localhost:5000')
+        webbrowser.open('http://localhost:6789')
 
     browser_thread = threading.Thread(target=open_browser, daemon=True)
     browser_thread.start()
 
     # Run Flask server with Waitress (production-grade WSGI server)
     from waitress import serve
-    print("Starting LibreCrawl on http://localhost:5000")
+    print("Starting LibreCrawl on http://localhost:6789")
     print("Using Waitress WSGI server with multi-threading support")
-    serve(app, host='0.0.0.0', port=5000, threads=8)
+    serve(app, host='0.0.0.0', port=6789, threads=8)
 
 if __name__ == '__main__':
     main()

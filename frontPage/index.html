@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>URL 树查看器</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif']
+          },
+          colors: {
+            background: '#020817',
+            foreground: '#e2e8f0',
+            muted: '#0b1224',
+            mutedForeground: '#94a3b8',
+            card: '#0f172a'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    summary { list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+    summary::marker { content: ""; }
+    .chevron { transition: transform 150ms ease; }
+    details[open] .chevron { transform: rotate(90deg); }
+  </style>
+</head>
+<body class="min-h-screen bg-background text-foreground">
+  <div class="bg-gradient-to-b from-background via-background to-slate-900/60 min-h-screen">
+    <div class="mx-auto max-w-6xl px-6 py-10 space-y-6">
+      <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1">
+          <p class="text-sm text-slate-400">Shadcn 风格 • 本地 JSON 预览</p>
+          <h1 class="text-3xl font-semibold tracking-tight text-slate-50">URL 树状结构</h1>
+          <p class="text-sm text-slate-400">数据来源：当前目录的 <code class="rounded bg-slate-800 px-1.5 py-0.5 text-xs">jhu.json</code></p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="expandAllBtn" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-card px-3 py-2 text-sm font-medium text-slate-100 shadow-sm transition hover:border-emerald-400/60 hover:text-emerald-200">
+            <svg class="h-4 w-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+            全部展开
+          </button>
+          <button id="collapseAllBtn" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-card px-3 py-2 text-sm font-medium text-slate-100 shadow-sm transition hover:border-rose-400/60 hover:text-rose-200">
+            <svg class="h-4 w-4 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 15l-6-6-6 6" />
+            </svg>
+            全部折叠
+          </button>
+        </div>
+      </header>
+
+      <div class="rounded-2xl border border-slate-800 bg-card/80 shadow-xl backdrop-blur">
+        <div class="flex items-center justify-between border-b border-slate-800 px-5 py-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300">
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12h3l2 7 4-14 2 7h7" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm font-medium text-slate-200">站点结构</p>
+              <p id="statusText" class="text-xs text-slate-400">正在加载 JSON...</p>
+            </div>
+          </div>
+          <span class="rounded-full border border-slate-700 bg-slate-800/60 px-3 py-1 text-xs text-slate-300">只读预览</span>
+        </div>
+
+        <div id="treeRoot" class="space-y-2 px-5 py-4">
+          <div class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
+            <svg class="h-5 w-5 animate-spin text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" class="opacity-20"></circle>
+              <path d="M22 12a10 10 0 0 0-10-10" />
+            </svg>
+            正在加载树数据...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const treeRoot = document.getElementById('treeRoot');
+    const statusText = document.getElementById('statusText');
+    const expandAllBtn = document.getElementById('expandAllBtn');
+    const collapseAllBtn = document.getElementById('collapseAllBtn');
+
+    function formatUrl(url) {
+      if (!url) return '';
+      try {
+        const { host, pathname } = new URL(url);
+        return `${host}${pathname}`;
+      } catch {
+        return url;
+      }
+    }
+
+    function createLeaf(node) {
+      const row = document.createElement('div');
+      row.className = 'flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 shadow-sm hover:border-slate-700';
+
+      const dot = document.createElement('span');
+      dot.className = 'mt-1 h-2 w-2 rounded-full bg-emerald-400/80 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]';
+      row.appendChild(dot);
+
+      const textWrap = document.createElement('div');
+      textWrap.className = 'flex-1 space-y-0.5';
+      const title = document.createElement('div');
+      title.className = 'font-medium';
+      title.textContent = node.name || '未命名节点';
+      textWrap.appendChild(title);
+
+      if (node.url) {
+        const url = document.createElement('div');
+        url.className = 'text-xs text-slate-400 break-all';
+        url.textContent = node.url;
+        textWrap.appendChild(url);
+      }
+
+      row.appendChild(textWrap);
+      return row;
+    }
+
+    function createBranch(node, level = 0, isRoot = false) {
+      const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+      if (!hasChildren) return createLeaf(node);
+
+      const details = document.createElement('details');
+      details.className = level === 0
+        ? 'group rounded-2xl border border-slate-800 bg-slate-900/60 shadow-sm'
+        : 'group rounded-xl border border-slate-800 bg-slate-900/50 shadow-sm';
+      details.open = isRoot;
+
+      const summary = document.createElement('summary');
+      summary.className = 'flex cursor-pointer list-none items-start gap-3 rounded-xl px-3 py-2 text-sm text-slate-100 transition hover:bg-slate-800/80';
+
+      const icon = document.createElement('span');
+      icon.className = 'chevron mt-1 flex h-6 w-6 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 text-slate-300 shadow-inner';
+      icon.innerHTML = '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>';
+      summary.appendChild(icon);
+
+      const textWrap = document.createElement('div');
+      textWrap.className = 'flex-1 space-y-0.5';
+      const title = document.createElement('div');
+      title.className = 'font-semibold';
+      title.textContent = node.name || '未命名分支';
+      textWrap.appendChild(title);
+
+      const metaRow = document.createElement('div');
+      metaRow.className = 'flex flex-wrap items-center gap-2 text-xs text-slate-400';
+
+      if (node.url) {
+        const url = document.createElement('span');
+        url.className = 'rounded-full bg-slate-800/60 px-2 py-0.5';
+        url.textContent = formatUrl(node.url);
+        metaRow.appendChild(url);
+      }
+
+      const count = document.createElement('span');
+      count.className = 'rounded-full bg-emerald-500/15 px-2 py-0.5 text-emerald-300';
+      count.textContent = `${node.children.length} 个子节点`;
+      metaRow.appendChild(count);
+
+      textWrap.appendChild(metaRow);
+      summary.appendChild(textWrap);
+      details.appendChild(summary);
+
+      const childrenWrap = document.createElement('div');
+      childrenWrap.className = 'space-y-2 border-l border-slate-800/70 pb-2 pl-5 pt-2';
+      node.children.forEach(child => childrenWrap.appendChild(createBranch(child, level + 1, false)));
+      details.appendChild(childrenWrap);
+
+      return details;
+    }
+
+    async function loadJson() {
+      try {
+        const res = await fetch('./jhu.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const hasChildren = Array.isArray(data.children) && data.children.length > 0;
+        treeRoot.innerHTML = '';
+        treeRoot.appendChild(createBranch(data, 0, true));
+        statusText.textContent = hasChildren ? `已加载 ${data.children.length} 个一级节点` : '未找到子节点';
+      } catch (err) {
+        treeRoot.innerHTML = '';
+        const errorBox = document.createElement('div');
+        errorBox.className = 'rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100';
+        errorBox.textContent = `加载 jhu.json 失败：${err.message}`;
+        treeRoot.appendChild(errorBox);
+        statusText.textContent = '加载失败';
+      }
+    }
+
+    expandAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('#treeRoot details').forEach(el => { el.open = true; });
+    });
+
+    collapseAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('#treeRoot details').forEach((el, idx) => {
+        el.open = idx === 0; // 保持根节点展开，方便定位
+      });
+    });
+
+    loadJson();
+  </script>
+</body>
+</html>

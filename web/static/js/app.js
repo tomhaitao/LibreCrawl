@@ -1738,6 +1738,90 @@ function closeUrlDetails() {
     }
 }
 
+function openJinaModal(url) {
+    const safeUrl = escapeHtml(url);
+
+    // Remove any existing Jina modal first
+    const existing = document.querySelector('.jina-modal-overlay');
+    if (existing) {
+        existing.remove();
+    }
+
+    const modalContent = `
+        <div class="jina-modal-overlay" onclick="closeJinaModal()">
+            <div class="jina-modal" onclick="event.stopPropagation()">
+                <div class="jina-modal-header">
+                    <h3>Jina Markdown</h3>
+                    <button class="close-btn" onclick="closeJinaModal()">×</button>
+                </div>
+                <div class="jina-modal-body">
+                    <div class="jina-modal-url">${safeUrl}</div>
+                    <div id="jinaModalStatus" class="jina-markdown-status"></div>
+                    <pre id="jinaModalContent" class="jina-markdown-content"></pre>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalContent);
+}
+
+function closeJinaModal() {
+    const modal = document.querySelector('.jina-modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function jinaCrawlFromTable(url) {
+    // 打开单独的 Jina Markdown 弹窗，然后请求后端
+    openJinaModal(url);
+    jinaCrawl(url);
+}
+
+async function jinaCrawl(url) {
+    const statusEl = document.getElementById('jinaModalStatus');
+    const contentEl = document.getElementById('jinaModalContent');
+
+    if (!statusEl || !contentEl) {
+        console.error('Jina modal elements not found');
+        return;
+    }
+
+    statusEl.textContent = 'Fetching markdown from Jina...';
+    contentEl.textContent = '';
+
+    try {
+        const response = await fetch('/api/jina_crawl', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            const message = (data && data.error) ? data.error : 'Unknown error';
+            statusEl.textContent = `Error: ${message}`;
+            if (typeof showNotification === 'function') {
+                showNotification('Jina Crawl failed: ' + message, 'error');
+            }
+            return;
+        }
+
+        statusEl.textContent = 'Success. Markdown preview:';
+        contentEl.textContent = data.markdown || '';
+    } catch (error) {
+        console.error('Jina Crawl error:', error);
+        statusEl.textContent = 'Error calling Jina API';
+        if (typeof showNotification === 'function') {
+            showNotification('Jina Crawl failed', 'error');
+        }
+    }
+}
+
 function displayPageSpeedResults(results) {
     const container = document.getElementById('pagespeedResults');
     if (!container || !results || results.length === 0) {
@@ -2091,6 +2175,7 @@ function renderOverviewRow(row, urlData, index) {
     const linksInfo = `${urlData.internal_links || 0}/${urlData.external_links || 0}`;
     const imagesCount = (urlData.images || []).length;
     const jsRendered = urlData.javascript_rendered ? '✅ JS' : '';
+    const escapedUrl = urlData.url.replace(/'/g, "\\'");
 
     const cells = [
         urlData.url,
@@ -2106,7 +2191,8 @@ function renderOverviewRow(row, urlData, index) {
         linksInfo,
         imagesCount > 0 ? `${imagesCount} images` : '',
         jsRendered,
-        `<button class="details-btn" onclick="showUrlDetails('${urlData.url.replace(/'/g, "\\'")}')">📊 Details</button>`
+        `<button class="details-btn" onclick="showUrlDetails('${escapedUrl}')">📊 Details</button>`,
+        `<button class="details-btn" onclick="jinaCrawlFromTable('${escapedUrl}')">Jina</button>`
     ];
 
     cells.forEach(cellData => {
@@ -2121,12 +2207,14 @@ function renderOverviewRow(row, urlData, index) {
 }
 
 function renderInternalRow(row, urlData, index) {
+    const escapedUrl = urlData.url.replace(/'/g, "\\'");
     const cells = [
         urlData.url,
         urlData.status_code,
         urlData.content_type || '',
         urlData.size || 0,
-        urlData.title || ''
+        urlData.title || '',
+        `<button class="details-btn" onclick="jinaCrawlFromTable('${escapedUrl}')">Jina</button>`
     ];
 
     cells.forEach(cellData => {
@@ -2137,12 +2225,14 @@ function renderInternalRow(row, urlData, index) {
 }
 
 function renderExternalRow(row, urlData, index) {
+    const escapedUrl = urlData.url.replace(/'/g, "\\'");
     const cells = [
         urlData.url,
         urlData.status_code,
         urlData.content_type || '',
         urlData.size || 0,
-        urlData.title || ''
+        urlData.title || '',
+        `<button class="details-btn" onclick="jinaCrawlFromTable('${escapedUrl}')">Jina</button>`
     ];
 
     cells.forEach(cellData => {

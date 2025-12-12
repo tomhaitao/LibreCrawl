@@ -828,6 +828,12 @@ body {
     font-weight: 600;
 }
 
+.details-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .close-btn {
     background: none;
     border: none;
@@ -929,6 +935,84 @@ body {
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.jina-markdown-status {
+    font-size: 13px;
+    color: #e5e7eb;
+    margin-bottom: 8px;
+}
+
+.jina-markdown-content {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 6px;
+    padding: 12px;
+    color: #e5e7eb;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    max-height: 260px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.jina-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.jina-modal {
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid rgba(167, 139, 250, 0.4);
+    border-radius: 12px;
+    width: 60%;
+    max-width: 800px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+}
+
+.jina-modal-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.jina-modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #f9fafb;
+}
+
+.jina-modal-body {
+    padding: 14px 18px;
+    overflow-y: auto;
+}
+
+.jina-modal-url {
+    background: rgba(79, 70, 229, 0.12);
+    border: 1px solid rgba(79, 70, 229, 0.4);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: #a855f7;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    margin-bottom: 10px;
+    word-break: break-all;
 }
 
 .details-btn {
